@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getLocalJournals, getLocalVoiceEntries, JournalEntry } from "@/lib/mockData";
+import { fetchApi } from "@/lib/api";
 import { motion } from "motion/react";
 import {
   AreaChart,
@@ -28,58 +28,42 @@ export default function TimelinePage() {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [timeRange, setTimeRange] = useState<"7d" | "30d">("7d");
   const [activeMetric, setActiveMetric] = useState<keyof Omit<ChartDataPoint, "dateLabel">>("Stress");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const journals = getLocalJournals();
-    const voices = getLocalVoiceEntries();
+    async function loadTimeline() {
+      try {
+        const data = await fetchApi("/wellness/timeline");
+        if (data && data.length > 0) {
+          // Sort chronologically ascending
+          const sorted = [...data].sort((a, b) => new Date(a.scoredAt).getTime() - new Date(b.scoredAt).getTime());
+          const mapped: ChartDataPoint[] = sorted.map((p: any) => ({
+            dateLabel: new Date(p.scoredAt).toLocaleDateString([], { month: "short", day: "numeric" }),
+            Stress: p.stress,
+            Energy: p.energy,
+            Confidence: p.confidence,
+            Focus: p.focus,
+            Motivation: p.motivation,
+          }));
 
-    // Map journals and voices to points
-    const points: { date: Date; entry: { stress: number; energy: number; confidence: number; focus: number; motivation: number } }[] = [];
+          const limit = timeRange === "7d" ? 7 : 30;
+          setChartData(mapped.slice(-limit));
+        } else {
+          // Fallback mock progression if empty
+          generateMockProgression();
+        }
+      } catch {
+        generateMockProgression();
+      } finally {
+        setLoading(false);
+      }
+    }
 
-    journals.forEach((j) => {
-      points.push({
-        date: new Date(j.createdAt),
-        entry: {
-          stress: j.analysis.stressScore,
-          energy: j.analysis.energyScore,
-          confidence: j.analysis.confidenceScore,
-          focus: j.analysis.focusScore,
-          motivation: j.analysis.motivationScore,
-        },
-      });
-    });
-
-    voices.forEach((v) => {
-      points.push({
-        date: new Date(v.createdAt),
-        entry: {
-          stress: v.analysis.stressScore,
-          energy: v.analysis.energyScore,
-          confidence: v.analysis.confidenceScore,
-          focus: v.analysis.focusScore,
-          motivation: v.analysis.motivationScore,
-        },
-      });
-    });
-
-    // Sort chronologically
-    points.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    // Group or select latest points for simplicity
-    const formattedPoints: ChartDataPoint[] = points.map((p) => ({
-      dateLabel: p.date.toLocaleDateString([], { month: "short", day: "numeric" }),
-      Stress: p.entry.stress,
-      Energy: p.entry.energy,
-      Confidence: p.entry.confidence,
-      Focus: p.entry.focus,
-      Motivation: p.entry.motivation,
-    }));
-
-    // If empty, generate standard mock progression
-    if (formattedPoints.length === 0) {
+    function generateMockProgression() {
       const generated: ChartDataPoint[] = [];
       const now = Date.now();
-      for (let i = 6; i >= 0; i--) {
+      const limit = timeRange === "7d" ? 7 : 30;
+      for (let i = limit - 1; i >= 0; i--) {
         const d = new Date(now - i * 24 * 3600 * 1000);
         generated.push({
           dateLabel: d.toLocaleDateString([], { month: "short", day: "numeric" }),
@@ -91,10 +75,10 @@ export default function TimelinePage() {
         });
       }
       setChartData(generated);
-    } else {
-      setChartData(formattedPoints);
     }
-  }, []);
+
+    loadTimeline();
+  }, [timeRange]);
 
   const metrics = [
     { label: "Stress", color: "var(--destructive)", icon: ShieldAlert },

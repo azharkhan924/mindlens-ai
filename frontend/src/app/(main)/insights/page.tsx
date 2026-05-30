@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getWellnessScore, WellnessScore } from "@/lib/mockData";
+import { fetchApi } from "@/lib/api";
 import { motion } from "motion/react";
 import {
   BarChart,
@@ -23,45 +23,54 @@ import {
 } from "lucide-react";
 
 export default function InsightsPage() {
-  const [scoreData, setScoreData] = useState<WellnessScore | null>(null);
-
-  useEffect(() => {
-    setScoreData(getWellnessScore());
-  }, []);
-
-  // Inferred Sleep logs from journals
-  const sleepData = [
+  const [loading, setLoading] = useState(true);
+  const [sleepData, setSleepData] = useState<any[]>([
     { day: "Mon", Hours: 6.8, Quality: 68 },
     { day: "Tue", Hours: 7.2, Quality: 75 },
-    { day: "Wed", Hours: 5.5, Quality: 48 }, // Spiked mid-week pressure
+    { day: "Wed", Hours: 5.5, Quality: 48 },
     { day: "Thu", Hours: 7.0, Quality: 70 },
     { day: "Fri", Hours: 8.2, Quality: 85 },
     { day: "Sat", Hours: 8.5, Quality: 90 },
     { day: "Sun", Hours: 7.8, Quality: 82 },
-  ];
+  ]);
 
-  // Inferred mood sentiment breakdowns
-  const sentimentDistribution = [
+  const [sentimentDistribution, setSentimentDistribution] = useState<any[]>([
     { name: "Serenity", count: 42, color: "var(--calm)" },
     { name: "Focus", count: 25, color: "var(--focus)" },
     { name: "Anxiety", count: 18, color: "var(--destructive)" },
     { name: "Gratitude", count: 15, color: "var(--warmth)" },
-  ];
+  ]);
 
-  // Custom behavior matrix
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const periods = ["Morning", "Afternoon", "Evening", "Night"];
-
-  // Heatmap values representing stress levels (1 to 10)
-  const heatmapData: { [key: string]: number } = {
+  const [heatmapData, setHeatmapData] = useState<{ [key: string]: number }>({
     "Mon-Morning": 4, "Mon-Afternoon": 6, "Mon-Evening": 3, "Mon-Night": 2,
     "Tue-Morning": 5, "Tue-Afternoon": 7, "Tue-Evening": 4, "Tue-Night": 3,
-    "Wed-Morning": 6, "Wed-Afternoon": 8, "Wed-Evening": 5, "Wed-Night": 4, // Stress peak
+    "Wed-Morning": 6, "Wed-Afternoon": 8, "Wed-Evening": 5, "Wed-Night": 4,
     "Thu-Morning": 4, "Thu-Afternoon": 5, "Thu-Evening": 3, "Thu-Night": 2,
     "Fri-Morning": 3, "Fri-Afternoon": 4, "Fri-Evening": 2, "Fri-Night": 1,
     "Sat-Morning": 2, "Sat-Afternoon": 2, "Sat-Evening": 1, "Sat-Night": 1,
     "Sun-Morning": 1, "Sun-Afternoon": 2, "Sun-Evening": 1, "Sun-Night": 1,
-  };
+  });
+
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const periods = ["Morning", "Afternoon", "Evening", "Night"];
+
+  useEffect(() => {
+    async function loadDashboardInsights() {
+      try {
+        const data = await fetchApi("/insights/dashboard");
+        if (data) {
+          if (data.sleepData) setSleepData(data.sleepData);
+          if (data.sentimentDistribution) setSentimentDistribution(data.sentimentDistribution);
+          if (data.heatmapData) setHeatmapData(data.heatmapData);
+        }
+      } catch {
+        // Fallback silently to static defaults
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadDashboardInsights();
+  }, []);
 
   const getHeatmapColor = (stressVal: number) => {
     if (stressVal >= 7) return "bg-destructive/35 border-destructive/20"; // high stress
@@ -69,8 +78,6 @@ export default function InsightsPage() {
     if (stressVal >= 3) return "bg-calm/25 border-calm/15"; // light
     return "bg-energy/20 border-energy/10"; // optimal calm
   };
-
-  if (!scoreData) return null;
 
   return (
     <motion.div

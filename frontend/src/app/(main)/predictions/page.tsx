@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getWellnessPredictions, WellnessPrediction } from "@/lib/mockData";
+import { fetchApi } from "@/lib/api";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Sparkles,
@@ -13,12 +13,42 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface WellnessPrediction {
+  id: string;
+  type: string;
+  score: number;
+  confidence: number;
+  status: "low" | "medium" | "high";
+  explanation: string;
+  details: string[];
+}
+
 export default function PredictionsPage() {
   const [predictions, setPredictions] = useState<WellnessPrediction[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setPredictions(getWellnessPredictions());
+    async function loadPredictions() {
+      try {
+        const data = await fetchApi("/wellness/predictions");
+        const mapped = data.map((p: any) => ({
+          id: p.id,
+          type: p.predictionType,
+          score: p.probability,
+          confidence: p.confidence,
+          status: p.status,
+          explanation: p.explanation,
+          details: JSON.parse(p.detailsJson || "[]"),
+        }));
+        setPredictions(mapped);
+      } catch {
+        // Fallback to empty if error
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadPredictions();
   }, []);
 
   const getStatusBadge = (status: "low" | "medium" | "high") => {
@@ -72,87 +102,103 @@ export default function PredictionsPage() {
       </div>
 
       {/* Predictions grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-        {predictions.map((p) => {
-          const isExpanded = expandedId === p.id;
-          return (
-            <div
-              key={p.id}
-              className="p-6 rounded-3xl glass-card border border-border shadow-sm flex flex-col justify-between gap-4 transition-all duration-300 hover:shadow-md"
-            >
-              <div className="flex items-center justify-between w-full">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {p.type}
-                </span>
-                <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-semibold border", getStatusBadge(p.status))}>
-                  {p.status}
-                </span>
-              </div>
-
-              {/* Score Display and explanatory ring */}
-              <div className="flex items-center gap-6 my-2 text-left">
-                <div className="relative h-20 w-20 rounded-2xl bg-muted/30 border border-border flex items-center justify-center text-xl font-bold shadow-inner">
-                  {p.score}%
-                  <span className="absolute bottom-1 text-[8px] text-muted-foreground uppercase font-semibold tracking-wider">
-                    Risk
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <span className="text-xs text-muted-foreground animate-pulse">Running cognitive fatigue model scans...</span>
+        </div>
+      ) : predictions.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+          <div className="h-14 w-14 rounded-full bg-calm/10 flex items-center justify-center border border-calm/20">
+            <BrainCircuit className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-heading font-semibold text-base">No wellness predictions yet</h3>
+            <p className="text-xs text-muted-foreground mt-1">Start writing journals or recording voice scans to generate predictions.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+          {predictions.map((p) => {
+            const isExpanded = expandedId === p.id;
+            return (
+              <div
+                key={p.id}
+                className="p-6 rounded-3xl glass-card border border-border shadow-sm flex flex-col justify-between gap-4 transition-all duration-300 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {p.type}
+                  </span>
+                  <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-semibold border", getStatusBadge(p.status))}>
+                    {p.status}
                   </span>
                 </div>
-                <div>
-                  <h4 className="text-xs font-semibold">Model Confidence: {p.confidence}%</h4>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">
-                    Aggregated semantic match strength across 5 check-ins.
+
+                {/* Score Display and explanatory ring */}
+                <div className="flex items-center gap-6 my-2 text-left">
+                  <div className="relative h-20 w-20 rounded-2xl bg-muted/30 border border-border flex items-center justify-center text-xl font-bold shadow-inner">
+                    {p.score}%
+                    <span className="absolute bottom-1 text-[8px] text-muted-foreground uppercase font-semibold tracking-wider">
+                      Risk
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold">Model Confidence: {p.confidence}%</h4>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">
+                      Aggregated semantic match strength across 5 check-ins.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Explanation panel */}
+                <div className="bg-muted/40 p-4.5 rounded-2xl border border-border/50 text-left">
+                  <p className="text-xs leading-relaxed text-foreground/90 font-light">
+                    {p.explanation}
                   </p>
                 </div>
-              </div>
 
-              {/* Explanation panel */}
-              <div className="bg-muted/40 p-4.5 rounded-2xl border border-border/50 text-left">
-                <p className="text-xs leading-relaxed text-foreground/90 font-light">
-                  {p.explanation}
-                </p>
-              </div>
+                {/* Expand details trigger */}
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => toggleExpand(p.id)}
+                    className="flex items-center justify-between text-xs font-semibold text-primary hover:text-primary/80 transition-colors w-full border-t border-border pt-3"
+                    id={`prediction-expand-${p.id}`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Info className="h-4 w-4" />
+                      How this was calculated
+                    </span>
+                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
 
-              {/* Expand details trigger */}
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => toggleExpand(p.id)}
-                  className="flex items-center justify-between text-xs font-semibold text-primary hover:text-primary/80 transition-colors w-full border-t border-border pt-3"
-                  id={`prediction-expand-${p.id}`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Info className="h-4 w-4" />
-                    How this was calculated
-                  </span>
-                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <ul className="flex flex-col gap-2 pl-2 border-l border-border mt-1">
-                        {p.details.map((detail, idx) => (
-                          <li
-                            key={idx}
-                            className="text-[10px] text-muted-foreground leading-relaxed flex items-start gap-1.5"
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5 text-energy mt-0.5" />
-                            <span>{detail}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <ul className="flex flex-col gap-2 pl-2 border-l border-border mt-1">
+                          {p.details.map((detail, idx) => (
+                            <li
+                              key={idx}
+                              className="text-[10px] text-muted-foreground leading-relaxed flex items-start gap-1.5"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 text-energy mt-0.5" />
+                              <span>{detail}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </motion.div>
   );
 }

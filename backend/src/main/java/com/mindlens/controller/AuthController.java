@@ -60,4 +60,29 @@ public class AuthController {
             return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
         }
     }
+
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateProfile(@Valid @RequestBody com.mindlens.dto.ProfileUpdateRequest request) {
+        try {
+            User user = authService.updateProfile(request);
+            List<String> goals = Collections.emptyList();
+            try {
+                if (user.getWellnessGoalsJson() != null && !user.getWellnessGoalsJson().isBlank()) {
+                    goals = objectMapper.readValue(user.getWellnessGoalsJson(), new TypeReference<List<String>>() {});
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+            return ResponseEntity.ok(Map.of(
+                    "id", user.getId(),
+                    "email", user.getEmail(),
+                    "name", user.getName(),
+                    "ageRange", user.getAgeRange(),
+                    "wellnessGoals", goals,
+                    "createdAt", user.getCreatedAt()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

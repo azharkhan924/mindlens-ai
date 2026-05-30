@@ -1,224 +1,302 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import {
-  getLocalChatHistory,
-  saveLocalChatMessage,
-  clearChatHistory,
-  generateMockCompanionResponse,
-  ChatMessage,
-} from "@/lib/mockData";
+import React, { useState, useRef, useEffect } from "react";
+import { fetchApi } from "@/lib/api";
+import { Send, Plus, Trash2, Sparkles, Bot, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Send,
-  Sparkles,
-  Trash2,
-  Search,
-  MessageSquarePlus,
-  Smile,
-  ArrowDownCircle,
-  Clock,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+
+interface ChatMsg {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  detectedEmotion?: string;
+  createdAt: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+}
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [currentCompanionEmotion, setCurrentCompanionEmotion] = useState("Empathetic Presence");
-  
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const suggestedPrompts = [
-    "I'm feeling swamped and anxious today.",
-    "Give me a gentle reflection prompt.",
-    "Scan my current wellness score.",
-    "What is a good way to release shoulder tension?",
+    "I feel overwhelmed today...",
+    "Can you help me reflect on my week?",
+    "I need help calming my mind",
+    "What patterns have you noticed?",
   ];
 
+  // Load conversations on mount
   useEffect(() => {
-    setMessages(getLocalChatHistory());
+    async function loadConversations() {
+      try {
+        const convos = await fetchApi("/chat/conversations");
+        setConversations(convos || []);
+        if (convos && convos.length > 0) {
+          setActiveConversation(convos[0].id);
+        }
+      } catch {
+        // Silently handle if no conversations exist
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadConversations();
   }, []);
 
+  // Load messages when active conversation changes
   useEffect(() => {
-    // Scroll to bottom
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+    if (!activeConversation) {
+      setMessages([]);
+      return;
+    }
+    async function loadMessages() {
+      try {
+        const msgs = await fetchApi(`/chat/conversations/${activeConversation}/messages`);
+        setMessages(msgs || []);
+      } catch {
+        setMessages([]);
+      }
+    }
+    loadMessages();
+  }, [activeConversation]);
 
-  const handleSendMessage = (text: string) => {
-    if (!text.trim()) return;
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-    // Save User message
-    const userMsg = saveLocalChatMessage("user", text);
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue("");
-    setIsTyping(true);
-
-    // Simulate AI response stream
-    setTimeout(() => {
-      const response = generateMockCompanionResponse(text);
-      const aiMsg = saveLocalChatMessage("assistant", response.content, response.emotion);
-      setMessages((prev) => [...prev, aiMsg]);
-      setCurrentCompanionEmotion(response.emotion);
-      setIsTyping(false);
-    }, 1800);
-  };
-
-  const handleClearHistory = () => {
-    if (confirm("Are you sure you want to clear your chat history with Lens? Your profile parameters will not be affected.")) {
-      clearChatHistory();
-      setMessages(getLocalChatHistory());
-      setCurrentCompanionEmotion("Empathetic Presence");
+  const createNewConversation = async () => {
+    try {
+      const convo = await fetchApi("/chat/conversations", {
+        method: "POST",
+        body: JSON.stringify({ title: "New Conversation" }),
+      });
+      setConversations((prev) => [convo, ...prev]);
+      setActiveConversation(convo.id);
+      setMessages([]);
+    } catch {
+      // Handle error
     }
   };
 
-  const filteredMessages = messages.filter((msg) =>
-    msg.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const sendMessage = async (text?: string) => {
+    const messageText = text || input.trim();
+    if (!messageText || isSending) return;
+
+    // Create conversation if none exists
+    let conversationId = activeConversation;
+    if (!conversationId) {
+      try {
+        const convo = await fetchApi("/chat/conversations", {
+          method: "POST",
+          body: JSON.stringify({ title: messageText.slice(0, 50) }),
+        });
+        setConversations((prev) => [convo, ...prev]);
+        conversationId = convo.id;
+        setActiveConversation(convo.id);
+      } catch {
+        return;
+      }
+    }
+
+    // Optimistic UI: add user message
+    const tempUserMsg: ChatMsg = {
+      id: `temp-${Date.now()}`,
+      role: "user",
+      content: messageText,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+    setInput("");
+    setIsSending(true);
+
+    try {
+      const assistantMsg = await fetchApi(`/chat/conversations/${conversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message: messageText }),
+      });
+      // Replace temp message and add assistant response
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => m.id !== tempUserMsg.id);
+        // Add the user message from server (if different from temp) and assistant message
+        return [...withoutTemp, { ...tempUserMsg, id: `user-${Date.now()}` }, assistantMsg];
+      });
+    } catch {
+      // Remove optimistic message on error
+      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const emotionColor = (emotion?: string) => {
+    if (!emotion) return "text-muted-foreground";
+    const e = emotion.toLowerCase();
+    if (e.includes("calm") || e.includes("warm")) return "text-calm";
+    if (e.includes("joy") || e.includes("happy")) return "text-energy";
+    if (e.includes("concern") || e.includes("empathy")) return "text-focus";
+    return "text-primary";
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-100px)] w-full gap-4 relative"
-    >
-      {/* Top chat details bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-3xl glass-card border border-border shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-calm to-focus flex items-center justify-center shadow-md animate-pulse">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight">Lens AI Companion</h2>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-energy animate-ping"></span>
-              <span className="text-[10px] text-muted-foreground">
-                Current Tone: <span className="font-semibold text-primary">{currentCompanionEmotion}</span>
-              </span>
-            </div>
-          </div>
+    <div className="flex flex-col h-[calc(100vh-10rem)] md:h-[calc(100vh-8rem)]">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="font-heading font-semibold text-xl tracking-tight">AI Companion Chat</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Chat with Lens, your wellness companion</p>
         </div>
-
-        {/* Search & controls */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-48">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search conversation..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-full bg-muted border border-transparent focus:border-border outline-none text-xs"
-              id="chat-search-input"
-            />
-          </div>
+        <div className="flex gap-2">
           <button
-            onClick={handleClearHistory}
-            className="p-2 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-            title="Clear Chat History"
-            id="clear-chat-btn"
+            onClick={createNewConversation}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-medium hover:bg-primary/15 transition-all"
           >
-            <Trash2 className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" /> New Chat
           </button>
         </div>
       </div>
 
-      {/* Messages Pane Container */}
-      <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-4 p-4 rounded-3xl bg-muted/30 border border-border/50 shadow-inner">
-        <div className="text-center py-2 flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground font-mono">
-          <Clock className="h-3 w-3" />
-          End-to-End Encrypted Session
-        </div>
-
-        <AnimatePresence initial={false}>
-          {filteredMessages.map((msg) => {
-            const isUser = msg.role === "user";
-            return (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, scale: 0.98, y: 5 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className={cn(
-                  "flex flex-col max-w-[80%] gap-1.5",
-                  isUser ? "self-end items-end" : "self-start items-start"
-                )}
+      <div className="flex flex-1 gap-4 min-h-0">
+        {/* Conversation sidebar (desktop) */}
+        <div className="hidden md:flex flex-col w-56 gap-2 overflow-y-auto pr-2">
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest mb-1">Conversations</span>
+          {loading ? (
+            <div className="text-xs text-muted-foreground animate-pulse">Loading...</div>
+          ) : conversations.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No conversations yet.</p>
+          ) : (
+            conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setActiveConversation(c.id)}
+                className={`text-left p-2.5 rounded-xl text-xs transition-all truncate ${
+                  activeConversation === c.id
+                    ? "bg-primary/10 border border-primary/20 text-primary font-medium"
+                    : "bg-card border border-border text-muted-foreground hover:bg-muted"
+                }`}
               >
-                <div
-                  className={cn(
-                    "px-4.5 py-3 rounded-3xl text-sm leading-relaxed shadow-sm transition-all",
-                    isUser
-                      ? "bg-primary text-primary-foreground rounded-tr-sm"
-                      : "glass-card text-foreground rounded-tl-sm border border-border"
-                  )}
-                >
-                  <p className="whitespace-pre-line">{msg.content}</p>
-                </div>
-                {/* Message footer parameters */}
-                <div className="flex items-center gap-1.5 px-2 text-[8px] text-muted-foreground font-mono">
-                  <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  {!isUser && msg.detectedEmotion && (
-                    <>
-                      <span>•</span>
-                      <span className="text-primary font-semibold">{msg.detectedEmotion}</span>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {isTyping && (
-          <div className="self-start flex flex-col gap-1.5 max-w-[80%]">
-            <div className="glass-card px-4 py-3.5 rounded-3xl rounded-tl-sm flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce delay-100"></span>
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce delay-200"></span>
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce delay-300"></span>
-            </div>
-            <span className="text-[8px] text-muted-foreground font-mono px-2">Lens is typing...</span>
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Suggested quick actions if no query is active */}
-      {!searchQuery && messages.length <= 2 && (
-        <div className="flex flex-wrap gap-2 justify-center px-4">
-          {suggestedPrompts.map((prompt) => (
-            <button
-              key={prompt}
-              onClick={() => handleSendMessage(prompt)}
-              className="px-3.5 py-2 rounded-full border border-border bg-card hover:bg-muted text-xs text-muted-foreground hover:text-foreground transition-all shadow-sm"
-              id={`suggested-prompt-${prompt.toLowerCase().replace(/\s+/g, '-')}`}
-            >
-              {prompt}
-            </button>
-          ))}
+                {c.title || "Untitled"}
+              </button>
+            ))
+          )}
         </div>
-      )}
 
-      {/* Input panel */}
-      <div className="flex items-center gap-2 mt-1">
-        <input
-          type="text"
-          placeholder="Share your thoughts or current stress state..."
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSendMessage(inputValue)}
-          className="flex-1 px-5 py-3.5 rounded-full bg-card border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all shadow-sm font-medium"
-          id="chat-message-input"
-        />
-        <button
-          onClick={() => handleSendMessage(inputValue)}
-          disabled={!inputValue.trim()}
-          className="p-3.5 rounded-full bg-primary text-primary-foreground shadow hover:bg-primary/95 disabled:opacity-50 disabled:pointer-events-none transition-all"
-          aria-label="Send Message"
-          id="chat-send-btn"
-        >
-          <Send className="h-4.5 w-4.5" />
-        </button>
+        {/* Chat area */}
+        <div className="flex-1 flex flex-col bg-card/50 rounded-2xl border border-border overflow-hidden">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 && !loading && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center py-16 gap-4">
+                <div className="h-14 w-14 rounded-full bg-gradient-to-tr from-calm/20 to-focus/15 flex items-center justify-center border border-calm/20">
+                  <Sparkles className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-semibold text-base">Start a conversation</h3>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                    Share how you&apos;re feeling, ask for guidance, or reflect on your day with Lens.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center mt-2">
+                  {suggestedPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => sendMessage(prompt)}
+                      className="px-3 py-2 rounded-full bg-muted border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {msg.role === "assistant" && (
+                    <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-tr from-calm to-focus flex items-center justify-center shadow-sm">
+                      <Bot className="h-4 w-4 text-white" />
+                    </div>
+                  )}
+                  <div className={`max-w-[75%] ${msg.role === "user" ? "order-first" : ""}`}>
+                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-tr-md"
+                        : "bg-muted border border-border rounded-tl-md"
+                    }`}>
+                      {msg.content}
+                    </div>
+                    {msg.role === "assistant" && msg.detectedEmotion && (
+                      <span className={`text-[10px] mt-1 block ${emotionColor(msg.detectedEmotion)}`}>
+                        Sensing: {msg.detectedEmotion}
+                      </span>
+                    )}
+                  </div>
+                  {msg.role === "user" && (
+                    <div className="flex-shrink-0 h-8 w-8 rounded-full bg-muted border border-border flex items-center justify-center">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {isSending && (
+              <div className="flex gap-3 justify-start">
+                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-tr from-calm to-focus flex items-center justify-center shadow-sm">
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+                <div className="px-4 py-3 rounded-2xl bg-muted border border-border rounded-tl-md">
+                  <div className="flex gap-1.5">
+                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="p-3 border-t border-border">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                placeholder="Share what's on your mind..."
+                className="flex-1 px-4 py-3 rounded-xl bg-background border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all"
+                disabled={isSending}
+                id="chat-input"
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={!input.trim() || isSending}
+                className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm"
+                id="chat-send-btn"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

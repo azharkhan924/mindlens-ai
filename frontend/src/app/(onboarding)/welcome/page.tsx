@@ -2,17 +2,23 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveLocalProfile, UserProfile } from "@/lib/mockData";
-import { Heart, ArrowRight, Sparkles, Check, ChevronRight, Mic, Bell } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Heart, ArrowRight, Sparkles, Check, ChevronRight, Mic, Bell, Mail, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function WelcomePage() {
   const router = useRouter();
+  const { register, login, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [ageRange, setAgeRange] = useState("");
   const [goals, setGoals] = useState<string[]>([]);
   const [breathState, setBreathState] = useState("Inhale...");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
   
   // Track permissions mock
   const [micStatus, setMicStatus] = useState<"idle" | "granted">("idle");
@@ -27,6 +33,13 @@ export default function WelcomePage() {
     { id: "focus", label: "Sharpen Attention", desc: "Build sustainable focus blocks and avoid burnout." },
     { id: "growth", label: "Self-Discovery", desc: "Track motivational spikes and long-term wellness habits." }
   ];
+
+  // Redirect if already authenticated
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      router.push("/home");
+    }
+  }, [isAuthenticated, router]);
 
   // Simple breathing timer trigger
   React.useEffect(() => {
@@ -45,23 +58,47 @@ export default function WelcomePage() {
     }
   };
 
-  const handleNext = () => {
-    if (step === 2 && !name.trim()) return;
+  const handleNext = async () => {
+    if (step === 2 && (!name.trim() || !email.trim() || !password.trim())) return;
     if (step === 3 && !ageRange) return;
     if (step === 4 && goals.length === 0) return;
     
     if (step < 6) {
       setStep(step + 1);
     } else {
-      // Save profile and redirect
-      const profile: UserProfile = {
-        name,
-        ageRange,
-        goals,
-        isOnboarded: true
-      };
-      saveLocalProfile(profile);
+      // Final step — register with backend
+      setIsSubmitting(true);
+      setError("");
+      try {
+        await register({
+          email,
+          password,
+          name,
+          ageRange,
+          wellnessGoals: goals,
+        });
+        router.push("/home");
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Registration failed. Please try again.";
+        setError(errorMessage);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await login(email, password);
       router.push("/home");
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "Login failed. Check your credentials.";
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -138,42 +175,91 @@ export default function WelcomePage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
-              className="flex flex-col gap-6 w-full text-left"
+              className="flex flex-col gap-5 w-full text-left"
             >
               <div className="flex flex-col gap-2">
                 <div className="h-10 w-10 rounded-2xl bg-calm/10 flex items-center justify-center text-primary mb-2 shadow-sm border border-calm/20">
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <h3 className="font-heading font-semibold text-2xl tracking-tight">
-                  What should I call you?
+                  {authMode === "register" ? "Create your companion space" : "Welcome back"}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Your companion creates a customized space. Your real name or an alias is fine.
+                  {authMode === "register" 
+                    ? "Set up your profile to personalize your wellness journey."
+                    : "Sign in to continue your wellness journey."}
                 </p>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your preferred name..."
-                  className="w-full px-5 py-4 rounded-2xl bg-card border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-base transition-all shadow-sm font-medium"
-                  autoFocus
-                  onKeyDown={(e) => e.key === "Enter" && name.trim() && handleNext()}
-                  id="onboarding-name-input"
-                />
+              {error && (
+                <div className="px-4 py-3 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3">
+                {authMode === "register" && (
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your preferred name..."
+                    className="w-full px-5 py-3.5 rounded-2xl bg-card border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all shadow-sm font-medium"
+                    autoFocus
+                    id="onboarding-name-input"
+                  />
+                )}
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Email address..."
+                    className="w-full pl-11 pr-5 py-3.5 rounded-2xl bg-card border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all shadow-sm font-medium"
+                    id="onboarding-email-input"
+                  />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password (min. 6 characters)..."
+                    className="w-full pl-11 pr-5 py-3.5 rounded-2xl bg-card border border-border focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-sm transition-all shadow-sm font-medium"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (authMode === "login") handleLogin();
+                        else if (name.trim() && email.trim() && password.trim()) handleNext();
+                      }
+                    }}
+                    id="onboarding-password-input"
+                  />
+                </div>
               </div>
 
-              <button
-                onClick={handleNext}
-                disabled={!name.trim()}
-                className="self-end group flex items-center gap-1.5 px-6 py-3 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-md hover:bg-primary/95 disabled:opacity-50 disabled:pointer-events-none transition-all mt-4"
-                id="onboarding-name-next"
-              >
-                Continue
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              <div className="flex items-center justify-between mt-2">
+                <button
+                  onClick={() => {
+                    setAuthMode(authMode === "register" ? "login" : "register");
+                    setError("");
+                  }}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  {authMode === "register" ? "Already have an account? Sign in" : "Need an account? Register"}
+                </button>
+
+                <button
+                  onClick={authMode === "login" ? handleLogin : handleNext}
+                  disabled={isSubmitting || !email.trim() || !password.trim() || (authMode === "register" && !name.trim())}
+                  className="group flex items-center gap-1.5 px-6 py-3 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-md hover:bg-primary/95 disabled:opacity-50 disabled:pointer-events-none transition-all"
+                  id="onboarding-name-next"
+                >
+                  {isSubmitting ? "Loading..." : authMode === "login" ? "Sign In" : "Continue"}
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -376,6 +462,12 @@ export default function WelcomePage() {
                 <Check className="h-7 w-7 stroke-[3px]" />
               </div>
 
+              {error && (
+                <div className="px-4 py-3 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium w-full">
+                  {error}
+                </div>
+              )}
+
               <div className="flex flex-col gap-3">
                 <h3 className="font-heading font-semibold text-2xl tracking-tight">
                   Your companion space is ready.
@@ -387,10 +479,11 @@ export default function WelcomePage() {
 
               <button
                 onClick={handleNext}
-                className="group flex items-center gap-2 px-8 py-3.5 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-md hover:bg-primary/95 hover:shadow-lg transition-all mt-4"
+                disabled={isSubmitting}
+                className="group flex items-center gap-2 px-8 py-3.5 rounded-full bg-primary text-primary-foreground font-medium text-sm shadow-md hover:bg-primary/95 hover:shadow-lg transition-all mt-4 disabled:opacity-50"
                 id="onboarding-finish-btn"
               >
-                Enter Companion Dashboard
+                {isSubmitting ? "Creating your space..." : "Enter Companion Dashboard"}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
             </motion.div>

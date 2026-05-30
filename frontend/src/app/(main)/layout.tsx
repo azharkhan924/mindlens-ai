@@ -1,31 +1,25 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
-import { getLocalProfile } from "@/lib/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import BottomNav from "@/components/layout/BottomNav";
 import { Heart } from "lucide-react";
+import { useEffect } from "react";
 
-export default function MainLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    const profile = getLocalProfile();
-    if (!profile || !profile.isOnboarded) {
+    if (!isLoading && !isAuthenticated) {
       router.push("/welcome");
-    } else {
-      setLoading(false);
     }
-  }, [router]);
+  }, [isAuthenticated, isLoading, router]);
 
-  if (loading) {
+  if (isLoading || !isAuthenticated) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-background min-h-screen">
         <div className="flex flex-col items-center gap-3 text-center animate-pulse">

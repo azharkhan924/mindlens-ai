@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mindlens.dto.AuthRequest;
 import com.mindlens.dto.AuthResponse;
+import com.mindlens.dto.ProfileUpdateRequest;
 import com.mindlens.dto.RegisterRequest;
 import com.mindlens.model.User;
 import com.mindlens.repository.UserRepository;
@@ -113,6 +114,24 @@ public class AuthService {
                 .ageRange(user.getAgeRange())
                 .wellnessGoals(goals)
                 .build();
+    }
+
+    public User updateProfile(ProfileUpdateRequest request) {
+        User user = getCurrentAuthenticatedUser();
+        user.setName(request.getName());
+        user.setAgeRange(request.getAgeRange());
+
+        String goalsJson = "";
+        try {
+            if (request.getWellnessGoals() != null) {
+                goalsJson = objectMapper.writeValueAsString(request.getWellnessGoals());
+            }
+        } catch (Exception e) {
+            goalsJson = "[]";
+        }
+        user.setWellnessGoalsJson(goalsJson);
+
+        return userRepository.save(user);
     }
 
     public User getCurrentAuthenticatedUser() {

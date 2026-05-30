@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getLocalProfile, saveLocalProfile, UserProfile } from "@/lib/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchApi } from "@/lib/api";
 import { motion } from "motion/react";
 import {
   User,
@@ -15,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
+  const { user, refreshUser } = useAuth();
   const [name, setName] = useState("");
   const [ageRange, setAgeRange] = useState("");
   const [goals, setGoals] = useState<string[]>([]);
@@ -32,13 +34,12 @@ export default function SettingsPage() {
   ];
 
   useEffect(() => {
-    const profile = getLocalProfile();
-    if (profile) {
-      setName(profile.name || "");
-      setAgeRange(profile.ageRange || "");
-      setGoals(profile.goals || []);
+    if (user) {
+      setName(user.name || "");
+      setAgeRange(user.ageRange || "");
+      setGoals(user.wellnessGoals || []);
     }
-  }, []);
+  }, [user]);
 
   const handleGoalToggle = (id: string) => {
     if (goals.includes(id)) {
@@ -48,31 +49,38 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const profile: UserProfile = {
-      name,
-      ageRange,
-      goals,
-      isOnboarded: true,
-    };
-
-    saveLocalProfile(profile);
-    setAlertMsg("Profile configuration changes saved successfully.");
-    setShowAlert(true);
-    setTimeout(() => setShowAlert(false), 4000);
+    try {
+      await fetchApi("/auth/profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: name.trim(),
+          ageRange,
+          wellnessGoals: goals,
+        }),
+      });
+      await refreshUser();
+      setAlertMsg("Profile configuration changes saved successfully.");
+      setShowAlert(true);
+      setTimeout(() => setShowAlert(false), 4000);
+    } catch (err: any) {
+      setAlertMsg(err.message || "Failed to update profile.");
+      setShowAlert(true);
+      setTimeout(() => setShowAlert(false), 4000);
+    }
   };
 
   const handleClearAllData = () => {
     if (
       confirm(
-        "Are you absolutely sure you want to delete all MindLens AI wellness logs, voice transcripts, and profiles? This action is local and permanent."
+        "Are you absolutely sure you want to delete your local storage session and clear MindLens AI logs? This will log you out."
       )
     ) {
       localStorage.clear();
-      setAlertMsg("All device logs have been deleted successfully. Redirecting you to onboarding...");
+      setAlertMsg("All session logs have been deleted. Redirecting...");
       setShowAlert(true);
       setTimeout(() => {
         window.location.href = "/welcome";

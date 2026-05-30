@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { fetchApi } from "@/lib/api";
 import { motion } from "motion/react";
 import {
   ShieldAlert,
@@ -20,8 +21,19 @@ interface EmergencyContact {
   phone: string;
 }
 
+interface CrisisResource {
+  name: string;
+  number: string;
+  type: string;
+}
+
 export default function EmergencyPage() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [crisisResources, setCrisisResources] = useState<CrisisResource[]>([
+    { name: "988 Suicide & Crisis Lifeline", number: "988", type: "Call / Text (24/7)" },
+    { name: "Crisis Text Line", number: "Text HOME to 741741", type: "SMS Text (24/7)" },
+    { name: "The Trevor Project (LGBTQ+)", number: "1-866-488-7386", type: "Call / Text (24/7)" },
+  ]);
   const [name, setName] = useState("");
   const [relation, setRelation] = useState("");
   const [phone, setPhone] = useState("");
@@ -41,6 +53,18 @@ export default function EmergencyPage() {
         localStorage.setItem("mindlens_emergency_contacts", JSON.stringify(defaults));
       }
     }
+
+    async function loadCrisisResources() {
+      try {
+        const data = await fetchApi("/emergency/contacts");
+        if (data && data.length > 0) {
+          setCrisisResources(data);
+        }
+      } catch {
+        // Fallback to static defaults
+      }
+    }
+    loadCrisisResources();
   }, []);
 
   const handleAddContact = (e: React.FormEvent) => {
@@ -71,30 +95,6 @@ export default function EmergencyPage() {
     setContacts(updated);
     localStorage.setItem("mindlens_emergency_contacts", JSON.stringify(updated));
   };
-
-  const crisisResources = [
-    {
-      title: "988 Suicide & Crisis Lifeline",
-      desc: "Free, confidential support available 24/7. Call or text 988.",
-      phone: "988",
-      url: "https://988lifeline.org",
-      actionLabel: "Call 988",
-    },
-    {
-      title: "Crisis Text Line",
-      desc: "Text HOME to 741741 to connect with a crisis counselor 24/7.",
-      phone: "741-741",
-      url: "https://www.crisistextline.org",
-      actionLabel: "Text HOME",
-    },
-    {
-      title: "The Trevor Project",
-      desc: "LGBTQ crisis counseling helpline available 24/7. Call or text.",
-      phone: "1-866-488-7386",
-      url: "https://www.thetrevorproject.org",
-      actionLabel: "Call Trevor",
-    },
-  ];
 
   return (
     <motion.div
@@ -127,37 +127,30 @@ export default function EmergencyPage() {
             24/7 Immediate Support Hotlines
           </span>
 
-          <div className="flex flex-col gap-4">
-            {crisisResources.map((res) => (
-              <div
-                key={res.title}
-                className="p-5 rounded-3xl glass-card border border-border shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-destructive/20 transition-all duration-300"
-              >
-                <div className="flex-1">
-                  <h3 className="text-xs font-semibold text-foreground tracking-tight">{res.title}</h3>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed mt-1.5">{res.desc}</p>
+            {crisisResources.map((res) => {
+              const isSms = res.type.toLowerCase().includes("sms") || res.type.toLowerCase().includes("text");
+              const actionLabel = isSms ? "Send Message" : "Call " + res.number;
+              return (
+                <div
+                  key={res.name}
+                  className="p-5 rounded-3xl glass-card border border-border shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-destructive/20 transition-all duration-300"
+                >
+                  <div className="flex-1">
+                    <h3 className="text-xs font-semibold text-foreground tracking-tight">{res.name}</h3>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed mt-1.5">{res.type}</p>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+                    <a
+                      href={isSms ? `sms:${res.number.replace(/\D/g, '')}` : `tel:${res.number.replace(/\D/g, '')}`}
+                      className="flex items-center gap-1 px-4.5 py-2 rounded-full text-[10px] font-semibold bg-destructive/15 text-destructive border border-destructive/10 hover:bg-destructive/25 transition-all shadow-sm"
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                      {actionLabel}
+                    </a>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
-                  <a
-                    href={`tel:${res.phone}`}
-                    className="flex items-center gap-1 px-4.5 py-2 rounded-full text-[10px] font-semibold bg-destructive/15 text-destructive border border-destructive/10 hover:bg-destructive/25 transition-all shadow-sm"
-                  >
-                    <Phone className="h-3.5 w-3.5" />
-                    {res.actionLabel}
-                  </a>
-                  <a
-                    href={res.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors border border-border"
-                    title="Visit site"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
+              );
+            })}
 
           <div className="flex gap-3 p-4 bg-muted/40 rounded-2xl border border-border/50 text-left mt-1">
             <AlertTriangle className="h-5 w-5 text-warmth mt-0.5 shrink-0" />
