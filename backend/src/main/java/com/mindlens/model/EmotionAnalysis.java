@@ -20,6 +20,10 @@ public class EmotionAnalysis {
     @JoinColumn(name = "journal_entry_id")
     private JournalEntry journalEntry;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voice_recording_id")
+    private VoiceRecording voiceRecording;
+
     private Integer stressScore;
     private Integer energyScore;
     private Integer confidenceScore;

@@ -1,36 +1,35 @@
 package com.mindlens.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "chat_messages")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JournalEntry {
+public class ChatMessage {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnore
-    private User user;
+    @JoinColumn(name = "conversation_id", nullable = false)
+    @ToString.Exclude
+    private ChatConversation conversation;
 
-    private String title;
+    @Column(nullable = false)
+    private String role; // "user" or "assistant"
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    private LocalDateTime createdAt;
+    private String detectedEmotion;
 
-    @OneToOne(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private EmotionAnalysis emotionAnalysis;
+    private LocalDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {

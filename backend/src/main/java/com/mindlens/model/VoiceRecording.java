@@ -7,12 +7,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "voice_recordings")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JournalEntry {
+public class VoiceRecording {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -22,14 +22,22 @@ public class JournalEntry {
     @JsonIgnore
     private User user;
 
-    private String title;
+    private String duration; // e.g. "0:45"
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String content;
+    @Column(columnDefinition = "TEXT")
+    private String transcription;
+
+    private Integer pace; // WPM
+
+    private Integer energy; // 1 to 100
+
+    private Integer pauses; // pause count
+
+    private Integer confidence; // 0 to 100
 
     private LocalDateTime createdAt;
 
-    @OneToOne(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToOne(mappedBy = "voiceRecording", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private EmotionAnalysis emotionAnalysis;
 
     @PrePersist

@@ -7,12 +7,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "user_memories")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JournalEntry {
+public class UserMemory {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -22,15 +22,15 @@ public class JournalEntry {
     @JsonIgnore
     private User user;
 
-    private String title;
+    private String memoryType; // e.g. "Preference", "Fact", "Trigger"
 
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    private LocalDateTime createdAt;
+    @Column(columnDefinition = "TEXT")
+    private String metadataJson;
 
-    @OneToOne(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private EmotionAnalysis emotionAnalysis;
+    private LocalDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {

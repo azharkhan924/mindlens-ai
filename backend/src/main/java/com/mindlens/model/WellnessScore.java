@@ -7,12 +7,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "wellness_scores")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JournalEntry {
+public class WellnessScore {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -22,18 +22,20 @@ public class JournalEntry {
     @JsonIgnore
     private User user;
 
-    private String title;
+    private Integer overallScore; // 1 to 100
+    private Integer stress;
+    private Integer energy;
+    private Integer confidence;
+    private Integer focus;
+    private Integer motivation;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String content;
+    @Column(columnDefinition = "TEXT")
+    private String insight;
 
-    private LocalDateTime createdAt;
-
-    @OneToOne(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private EmotionAnalysis emotionAnalysis;
+    private LocalDateTime scoredAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        scoredAt = LocalDateTime.now();
     }
 }

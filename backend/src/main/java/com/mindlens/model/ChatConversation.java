@@ -4,15 +4,17 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "chat_conversations")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JournalEntry {
+public class ChatConversation {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -24,13 +26,12 @@ public class JournalEntry {
 
     private String title;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String content;
-
     private LocalDateTime createdAt;
 
-    @OneToOne(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private EmotionAnalysis emotionAnalysis;
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    @ToString.Exclude
+    private List<ChatMessage> messages = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {
