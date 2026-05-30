@@ -1,5 +1,6 @@
 package com.mindlens.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -18,10 +19,12 @@ public class EmotionAnalysis {
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "journal_entry_id")
+    @JsonIgnore
     private JournalEntry journalEntry;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "voice_recording_id")
+    @JsonIgnore
     private VoiceRecording voiceRecording;
 
     private Integer stressScore;

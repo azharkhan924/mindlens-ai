@@ -1,5 +1,7 @@
 package com.mindlens.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.net.URI;
@@ -7,6 +9,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class AIService {
@@ -17,9 +21,15 @@ public class AIService {
     @Value("${openai.model}")
     private String model;
 
+    private final ObjectMapper objectMapper;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+
+    public AIService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     /**
      * Analyzes incoming emotional journals using OpenAI API.
@@ -35,14 +45,14 @@ public class AIService {
             String systemPrompt = "You are an expert mental wellness analysis companion. Analyze this journal entry for stressScore, energyScore, confidenceScore, focusScore, motivationScore (1-100), key emotions list with intensities (0.0 to 1.0), theme hashtags, and a brief warm advisory tip. Do NOT diagnose clinical disorders. Output strict JSON only matching fields: stressScore, energyScore, confidenceScore, focusScore, motivationScore, emotions (array of {name, intensity, color}), themes (array of strings), insight (string).";
             String userPrompt = "Title: " + title + "\nContent: " + content;
 
-            String requestBody = "{"
-                    + "\"model\": \"" + model + "\","
-                    + "\"messages\": ["
-                    + "  {\"role\": \"system\", \"content\": \"" + systemPrompt.replace("\"", "\\\"") + "\"},"
-                    + "  {\"role\": \"user\", \"content\": \"" + userPrompt.replace("\"", "\\\"").replace("\n", "\\n") + "\"}"
-                    + "],"
-                    + "\"response_format\": {\"type\": \"json_object\"}"
-                    + "}";
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", model,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", userPrompt)
+                    ),
+                    "response_format", Map.of("type", "json_object")
+            ));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.openai.com/v1/chat/completions"))
@@ -54,7 +64,7 @@ public class AIService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
-                return response.body();
+                return extractAssistantContent(response.body());
             } else {
                 return "{\"error\": \"Failed connection with status: " + response.statusCode() + "\"}";
             }
@@ -95,15 +105,14 @@ public class AIService {
         try {
             String systemPrompt = "You are Lens, a warm and intelligent wellness companion. You provide empathetic emotional support, offer reflection prompts and stress management suggestions, and never diagnose medical conditions. Speak in a calm, warm, non-clinical tone. Output JSON only with two fields: 'content' (your response string) and 'detectedEmotion' (a 2-3 word string category, e.g. 'Soothing Calm', 'Deep Warmth', 'Shared Joy', 'Nurturing Support', 'Empathy').";
 
-            // Format history into a prompt or parse messages
-            String requestBody = "{"
-                    + "\"model\": \"" + model + "\","
-                    + "\"messages\": ["
-                    + "  {\"role\": \"system\", \"content\": \"" + systemPrompt.replace("\"", "\\\"") + "\"},"
-                    + "  {\"role\": \"user\", \"content\": \"History: " + conversationHistoryJson.replace("\"", "\\\"").replace("\n", "\\n") + "\\nUser Message: " + userMessage.replace("\"", "\\\"").replace("\n", "\\n") + "\"}"
-                    + "],"
-                    + "\"response_format\": {\"type\": \"json_object\"}"
-                    + "}";
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", model,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", "History: " + conversationHistoryJson + "\nUser Message: " + userMessage)
+                    ),
+                    "response_format", Map.of("type", "json_object")
+            ));
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.openai.com/v1/chat/completions"))
@@ -115,7 +124,7 @@ public class AIService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
-                return response.body();
+                return extractAssistantContent(response.body());
             } else {
                 return "{\"content\": \"I'm here to listen. Can you share more?\", \"detectedEmotion\": \"Empathy\"}";
             }
@@ -149,5 +158,14 @@ public class AIService {
         } catch (Exception e) {
             return "I am speaking to clear my head. Sometimes just letting my thoughts flow helps release some of the tension I've been carrying.";
         }
+    }
+
+    private String extractAssistantContent(String responseBody) throws Exception {
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode contentNode = root.path("choices").path(0).path("message").path("content");
+        if (contentNode.isMissingNode() || contentNode.asText().isBlank()) {
+            throw new IllegalStateException("OpenAI response did not include assistant content");
+        }
+        return contentNode.asText();
     }
 }

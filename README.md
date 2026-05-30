@@ -42,6 +42,28 @@ cd backend
 mvn spring-boot:run    # Starts on http://localhost:8081
 ```
 
+## Deployment Environment
+
+For Vercel, set `API_PROXY_URL` to your Render backend URL, for example:
+
+```bash
+API_PROXY_URL=https://your-render-service.onrender.com
+```
+
+The frontend calls `/api/*` and Next.js proxies those requests to `API_PROXY_URL`.
+You can alternatively set `NEXT_PUBLIC_API_URL` to the backend URL to call it
+directly from the browser.
+
+For Render/Spring Boot production, set:
+
+```bash
+SPRING_PROFILES_ACTIVE=prod
+SPRING_DATASOURCE_URL=jdbc:postgresql://<supabase-host>:5432/postgres?sslmode=require
+SPRING_DATASOURCE_USERNAME=<supabase-user>
+SPRING_DATASOURCE_PASSWORD=<supabase-password>
+OPENAI_API_KEY=<your-openai-key>
+```
+
 ## ⚠️ Disclaimer
 
 MindLens AI provides wellness insights, emotional trend tracking, and self-reflection tools. It does **NOT** diagnose clinical mental health disorders or provide medical diagnosis. If you are in crisis, please contact emergency services or call 988.

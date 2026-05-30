@@ -44,6 +44,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - API_PROXY_URL=http://backend:8081
     depends_on:
       - backend
 
