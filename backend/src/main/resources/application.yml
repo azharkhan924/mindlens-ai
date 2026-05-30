@@ -1,0 +1,40 @@
+server:
+  port: 8081
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: mindlens-backend
+  profiles:
+    active: dev
+
+  datasource:
+    url: jdbc:h2:mem:mindlensdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+# JWT token properties configuration
+app:
+  jwtSecret: 407F1D635234479532D932789437298473D398273927A843D29384729384
+  jwtExpirationMs: 86400000 # 1 day
+
+# External AI configuration
+openai:
+  apiKey: ${OPENAI_API_KEY:}
+  model: gpt-4o-mini
