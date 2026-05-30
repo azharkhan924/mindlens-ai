@@ -35,7 +35,7 @@ export async function fetchApi(endpoint: string, options: RequestInit = {}) {
       window.dispatchEvent(new Event('auth:unauthorized'));
     }
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || 'API request failed');
+    throw new Error(errorData.message || errorData.error || `API request failed (${response.status})`);
   }
   
   // Return null if no content
