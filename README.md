@@ -51,8 +51,9 @@ API_PROXY_URL=https://your-render-service.onrender.com
 ```
 
 The frontend calls `/api/*` and Next.js proxies those requests to `API_PROXY_URL`.
-You can alternatively set `NEXT_PUBLIC_API_URL` to the backend URL to call it
-directly from the browser.
+Do not set `NEXT_PUBLIC_API_URL` for browser calls; the app intentionally uses
+the same-origin `/api` proxy in production. Only set `NEXT_PUBLIC_DIRECT_API_URL`
+if you intentionally want browsers to call the backend directly.
 
 For Render/Spring Boot production, set:
 

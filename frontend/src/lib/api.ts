@@ -1,4 +1,4 @@
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
+const BASE_URL = (process.env.NEXT_PUBLIC_DIRECT_API_URL || '/api').replace(/\/$/, '');
 
 function getToken() {
   if (typeof window !== 'undefined') {
